@@ -119,24 +119,22 @@ When live calls are enabled and confirmed, the application uses the official `ca
 ![Public Deployment](docs/images/09_public_railway_deployment.png)
 <br><sub>**09 Public Railway Deployment** — public Railway URL proves the reviewer-accessible app is live.</sub>
 
----:|:---:|
-| ![Control Tower](docs/images/01_control_tower.png)<br><sub>The main X-Decision dashboard with XGBoost forecast, risk signals, and the local RAG policy context.</sub> | ![Debate Committee](docs/images/02_debate_committee.png)<br><sub>The transcript tab showing the Analyst, Compliance, and Dispatcher agents reasoning over the evidence.</sub> |
+---
 
-| Scenario Lab Stress Testing | Architecture & Data Sources |
+## Live CALL-E Approval Walkthrough
+
+- Dry run is the default safe mode.
+- Live mode places a real disclosed test call only after two explicit operator confirmations.
+- The live result is interpreted into the same human-in-the-loop states used by dry-run testing.
+- In this approved live example, the final status is `ESCALATION_APPROVED` and an escalation package is created.
+
+| Pending Live Result | Approved Escalation Package |
 |:---:|:---:|
-| ![Scenario Lab](docs/images/03_scenario_lab.png)<br><sub>Modifying temperature inputs and simulating unexpected demand shocks to stress-test the forecast.</sub> | ![Data Sources](docs/images/04_data_sources.png)<br><sub>Configuring Synthetic, Kaggle Historical, or EIA Live API data ingestion.</sub> |
+| ![Pending Result](docs/images/10_live-calle-disclosed-test-call-pending-result.png)<br><sub>**10 Live mode armed:** disclosed CALL-E test call has been confirmed and the app is waiting for the CALL-E result.</sub> | ![Approved Escalation](docs/images/11-live-calle-approved-escalation-package.png)<br><sub>**11 Live CALL-E result:** human approval confirmed and an escalation package is generated.</sub> |
 
-| Voice Escalation Overview | Safety Gates & Consent |
+| Compact Transcript | Full CALL-E Call Record |
 |:---:|:---:|
-| ![Voice Escalation](docs/images/05_voice_escalation_overview.png)<br><sub>The CALL-E escalation tab interface. *Demonstrates dry-run preview mode; no real call was placed.*</sub> | ![Safety Gates](docs/images/06_voice_escalation_safety_gates.png)<br><sub>Explicit human-in-the-loop consent gates required before dispatch. *Demonstrates dry-run preview mode; no real call was placed.*</sub> |
-
-| Escalation Result Packet | CALL-E Architecture |
-|:---:|:---:|
-| ![Dry Run Result](docs/images/07_dry_run_escalation_result.png)<br><sub>The structured JSON result returned from the CALL-E agent. *Demonstrates dry-run preview mode; no real call was placed.*</sub> | ![CALL-E Architecture](docs/images/08_call_e_architecture.png)<br><sub>The technical architecture diagram mapping the CALL-E Python SDK integration and safety flow.</sub> |
-
-| Public Railway Deployment | |
-|:---:|---|
-| ![Railway Deployment](docs/images/09_public_railway_deployment.png)<br><sub>The live Railway URL in the browser, proving the public deployment is successfully running and reviewable.</sub> | |
+| ![Compact Transcript](docs/images/12_live-calle-approved-compact-transcript.png)<br><sub>**12 Compact transcript:** readable compact transcript showing the human confirming authorization, evidence review, and approval.</sub> | ![Call Record](docs/images/13_calle-live-approved-call-transcript.png)<br><sub>**13 CALL-E dashboard:** call record showing the real disclosed test conversation and approval flow.</sub> |
 
 ---
 
