@@ -10,11 +10,11 @@
 [![PostgreSQL](https://img.shields.io/badge/Persistence-PostgreSQL-336791)](#persistence)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E)](#railway-deployment)
 
-GridGuard is an approval-gated voice escalation agent for grid-risk advisories. It uses forecasting, RAG/decision support, Strands Agents SDK, and CALL-E voice escalation to detect high-risk hours and present a recommended escalation path.
+GridGuard Voice Escalation Agent is an approval-gated CALL-E voice escalation workflow for grid-risk advisories.
 
-The human operator reviews the evidence and must explicitly approve any action. If approved, the official CALL-E Python SDK creates and waits for a structured call result.
+GridGuard detects elevated or critical grid risk using forecasting, scenario stress testing, and decision-support evidence. Once a risk is detected, the workflow drafts an escalation advisory. The human operator reviews the evidence and must explicitly approve the escalation. If approved, the official CALL-E Python SDK creates and waits for a structured call result.
 
-CALL-E runs in safe dry-run mode by default. Optional live mode is still supported for one disclosed, authorized, non-emergency test call. The live test requires `CALLE_API_KEY` and `CALLE_AUTHORIZED_TEST_NUMBER`. The app contacts only a configured authorized test recipient.
+CALL-E is used to contact only a configured authorized test recipient. Default mode is dry-run; no real call is placed. Optional live mode places one disclosed, authorized, non-emergency test call only after two explicit operator confirmations.
 
 ---
 
@@ -30,9 +30,9 @@ CALL-E runs in safe dry-run mode by default. Optional live mode is still support
 
 ---
 
-## Voice Escalation & CALL-E Integration (Major Extension)
+## CALL-E Voice Escalation Architecture
 
-The CALL-E Voice Escalation Agent is a **major extension** built on top of the original GridGuard forecasting and governance foundation. It transforms GridGuard from a passive decision-support dashboard into an active, outbound escalation agent while strictly preserving human-in-the-loop governance. 
+The CALL-E Voice Escalation Agent transforms GridGuard from a passive decision-support dashboard into an active, outbound escalation agent while strictly preserving human-in-the-loop governance. 
 
 GridGuard includes a polished **Voice Escalation** tab designed to draft, verify, and execute automated outbound calls via CALL-E when grid risk is elevated or critical.
 
@@ -58,27 +58,32 @@ To use the live CALL-E service, you must configure the application with your API
 - Memory/RAG may provide operational context but cannot approve escalation.
 - Escalation requires all three: authorization confirmed, advisory/evidence reviewed, and explicit approval.
 - Prompt injection, stale memory, unclear responses, or missing fields fall back to manual follow-up or blocked escalation.
-- LLM/RAG/memory are decision support only; deterministic workflow rules decide final status.
+- LLM/RAG/memory provide decision support only; deterministic workflow rules decide final status.
+- Ambiguous/missing responses default to manual follow-up.
 
-### Dry-run Human Approval Branches
+### Human Approval Branches & Call Flow
 
-Dry-run supports six human approval branches:
-1. Not authorized / wrong person
-2. Authorized, not reviewed
-3. Authorized, reviewed, hold
-4. Authorized, reviewed, reject
-5. Authorized, reviewed, approve
-6. Unclear response
+The CALL-E voice escalation asks the recipient:
+1. Are you the authorized Grid Operations Shift Supervisor or duty operations manager?
+2. Have you reviewed the GridGuard advisory and dashboard evidence?
+3. Do you approve escalation?
 
-Only **"Authorized, reviewed, approve"** creates an escalation package. Ambiguous/missing responses default to `NEEDS_MANUAL_FOLLOW_UP`. All outcomes save an audit packet.
+The app handles six possible human outcomes:
+- **Not authorized / wrong person** => `WRONG_RECIPIENT` => no package
+- **Authorized, not reviewed** => `PENDING_REVIEW` => no package
+- **Authorized, reviewed, hold** => `REVIEWED_HOLD` => no package
+- **Authorized, reviewed, reject** => `REVIEWED_NOT_APPROVED` => no package
+- **Authorized, reviewed, approve** => `ESCALATION_APPROVED` => escalation package created
+- **Unclear response** => `NEEDS_MANUAL_FOLLOW_UP` => no package
+
+Every outcome is saved as an audit packet. Audit uses JSON persistence by default. PostgreSQL-backed audit persistence is optional when `GRIDGUARD_PERSISTENCE_MODE=postgresql` and `DATABASE_URL` are configured.
 
 ### Consent & Safety
-GridGuard acts as **decision support only**.
+GridGuard acts as **decision support only** for the CALL-E integration.
 - It **never** controls grid infrastructure.
 - It **never** makes emergency decisions independently.
-- It **never** autonomously contacts real utilities or customers without human approval.
 - A draft escalation requires explicit boolean consent from the operator.
-- A second explicit confirmation checkbox is strictly required to execute the live call.
+- A second explicit confirmation checkbox is strictly required to execute the live CALL-E test call.
 - The UI forces the recipient number to be masked and displays an explicit AI disclosure.
 
 ### How CALL-E is Integrated
