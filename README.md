@@ -10,11 +10,11 @@
 [![PostgreSQL](https://img.shields.io/badge/Persistence-PostgreSQL-336791)](#persistence)
 [![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E)](#railway-deployment)
 
-GridGuard Voice Escalation Agent uses an XGBoost machine-learning pipeline to forecast electricity demand and identify critical grid risks. When a high-risk hour is detected, the internal expert system grounds the alert in local policy using RAG and presents a recommended escalation path.
+GridGuard is an approval-gated voice escalation agent for grid-risk advisories. It uses forecasting, RAG/decision support, Strands Agents SDK, and CALL-E voice escalation to detect high-risk hours and present a recommended escalation path.
 
 The human operator reviews the evidence and must explicitly approve any action. If approved, the official CALL-E Python SDK creates and waits for a structured call result.
 
-By default, the application runs in a safe dry-run preview mode. No real call is made in the public demo, ensuring the agent remains a safe, verifiable reference pattern for human-in-the-loop escalation.
+CALL-E runs in safe dry-run mode by default. Optional live mode is still supported for one disclosed, authorized, non-emergency test call. The live test requires `CALLE_API_KEY` and `CALLE_AUTHORIZED_TEST_NUMBER`. The app contacts only a configured authorized test recipient.
 
 ---
 
@@ -51,6 +51,26 @@ To use the live CALL-E service, you must configure the application with your API
 > By default, the application runs in **Dry-run preview mode**. In this mode, no real calls are placed. Instead, the application mocks the interaction with the CALL-E agent and parses synthetic response payloads (fixture data) while retaining the simulated critical-risk escalation goal. This ensures that developers and operators can safely test the escalation workflow without accidentally triggering outbound calls.
 > 
 > Furthermore, even when Live Mode is toggled on, the application requires both `CALLE_API_KEY` and `CALLE_AUTHORIZED_TEST_NUMBER` to be configured privately in the runtime environment. The live mode is restricted to an **optional, authorized, non-emergency live demonstration test**. The critical-risk goal is safely replaced with a non-emergency test script that asks for no operational action. The public Railway demo remains dry-run by default and does not expose either secret.
+
+### Safety and Security Model
+
+- The LLM may summarize/classify responses but cannot grant authorization.
+- Memory/RAG may provide operational context but cannot approve escalation.
+- Escalation requires all three: authorization confirmed, advisory/evidence reviewed, and explicit approval.
+- Prompt injection, stale memory, unclear responses, or missing fields fall back to manual follow-up or blocked escalation.
+- LLM/RAG/memory are decision support only; deterministic workflow rules decide final status.
+
+### Dry-run Human Approval Branches
+
+Dry-run supports six human approval branches:
+1. Not authorized / wrong person
+2. Authorized, not reviewed
+3. Authorized, reviewed, hold
+4. Authorized, reviewed, reject
+5. Authorized, reviewed, approve
+6. Unclear response
+
+Only **"Authorized, reviewed, approve"** creates an escalation package. Ambiguous/missing responses default to `NEEDS_MANUAL_FOLLOW_UP`. All outcomes save an audit packet.
 
 ### Consent & Safety
 GridGuard acts as **decision support only**.
@@ -727,6 +747,8 @@ The current PostgreSQL scope stores human decision audits in `gridguard_decision
 ---
 
 ## Streamlit interface
+
+The app currently has 8 Streamlit tabs.
 
 ### Sidebar
 

@@ -28,7 +28,7 @@
   },
   "validation": {
     "automated_tests_passed": 24,
-    "streamlit_tabs": 6,
+    "streamlit_tabs": 8,
     "source_compilation": "passed"
   },
   "files": [

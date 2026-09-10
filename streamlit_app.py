@@ -533,7 +533,11 @@ with tab_scenario:
         "Extreme Grid Stress": {"temperature_delta": 15.0, "outage_mw": 6000.0, "demand_shock_pct": 15.0},
     }
     
-    selected_preset = st.selectbox("Quick Presets", list(presets.keys()))
+    with st.container(border=True):
+        st.markdown("**Quick Presets** (Dropdown menu)")
+        st.write("Select a stress-test preset from the dropdown below.")
+        selected_preset = st.selectbox("Choose scenario preset", list(presets.keys()))
+        st.caption("This preset updates the stress inputs used to test grid risk, peak demand, capacity, and reserve margin.")
     if selected_preset != st.session_state.get("last_preset"):
         st.session_state.last_preset = selected_preset
         if presets[selected_preset] is not None:
@@ -887,7 +891,27 @@ with tab_escalation:
     
     # Check trigger condition
     if risk["level"] in ["CRITICAL", "ELEVATED"]:
-        st.warning(f"High-risk forecast detected ({risk['level']}). A draft voice escalation has been prepared.")
+        # Create Advisory Record
+        import random
+        if "advisory_id" not in st.session_state:
+            st.session_state.advisory_id = f"GG-{random.randint(1000, 9999)}"
+            
+        advisory = {
+            "advisory_id": st.session_state.advisory_id,
+            "asset_id": "Feeder-05",
+            "risk_type": f"{risk['level']} Outage Risk",
+            "risk_score": float(risk['peak_mw']),
+            "confidence": "High",
+            "severity": risk['level'],
+            "evidence_summary": f"Grid risk level is {risk['level']} with peak of {risk['peak_mw']:,.0f} MW.",
+            "recommended_action": "Request emergency response availability.",
+            "status": "PENDING_HUMAN_REVIEW"
+        }
+
+        st.markdown("### 🚨 Advisory Record")
+        st.info(f"**Advisory ID**: {advisory['advisory_id']} | **Asset**: {advisory['asset_id']} | **Severity**: {advisory['severity']}")
+        st.write(f"**Evidence**: {advisory['evidence_summary']}")
+        st.write(f"**Recommended Action**: {advisory['recommended_action']}")
         
         test_number = os.environ.get("CALLE_AUTHORIZED_TEST_NUMBER")
         masked_number = f"***-***-{test_number[-4:]}" if test_number else "Not configured"
@@ -896,12 +920,7 @@ with tab_escalation:
         with c1:
             st.text_input("Authorized Test Recipient", value=masked_number, disabled=True, help="Masked for security")
             
-        goal = st.text_area(
-            "Call Goal", 
-            value=f"Grid risk level is {risk['level']} with peak of {risk['peak_mw']:,.0f} MW. Requesting emergency response availability.", 
-            height=80
-        )
-        
+
         # Safety Panel
         with st.container(border=True):
             st.markdown("#### 🛡️ Live-Call Safety Panel")
@@ -911,6 +930,18 @@ with tab_escalation:
             
             dry_run_toggle = st.toggle("Dry-run preview (Default)", value=True)
             live_mode = not dry_run_toggle
+            
+            from backend.call_e_integration import DRY_RUN_BRANCHES
+            dry_run_scenario = DRY_RUN_BRANCHES[4]
+            if not live_mode:
+                with st.container(border=True):
+                    st.markdown("**Dry-Run Simulator Outcome** (Dropdown menu)")
+                    st.write("Select a simulated caller response branch from the dropdown below.")
+                    dry_run_scenario = st.selectbox(
+                        "Choose dry-run branch", 
+                        DRY_RUN_BRANCHES
+                    )
+                    st.caption("This selection controls the simulated human response, final status, audit result, and escalation package behavior.")
             
             can_dispatch = True
             if live_mode:
@@ -928,33 +959,247 @@ with tab_escalation:
                 
                 confirm_label = (
                     "2️⃣ I confirm I want to place this real disclosed test call." if live_mode
-                    else "2️⃣ I confirm I want to run the dry-run escalation preview. No call will be placed."
+                    else "2️⃣ I confirm I want to run the selected dry-run branch. No call will be placed."
                 )
                 consent_dispatch = st.checkbox(confirm_label)
                 
-                button_label = "Place real disclosed test call" if live_mode else "Run Dry-Run Preview"
+                button_label = "Place real disclosed test call" if live_mode else "Run Selected Dry-Run Branch"
                 if st.button(button_label, type="primary", disabled=not (consent_dispatch and can_dispatch)):
                     if "current_idempotency_key" not in st.session_state:
                         import uuid
                         st.session_state.current_idempotency_key = str(uuid.uuid4())
                         
                     try:
-                        with st.spinner("Dispatching call via CALL-E SDK..."):
+                        with st.status("Waiting for CALL-E result...") as status:
+                            from backend.call_e_integration import dispatch_escalation
                             final_res = dispatch_escalation(
-                                goal, 
+                                advisory, 
                                 dry_run=not live_mode,
-                                idempotency_key=st.session_state.current_idempotency_key
+                                idempotency_key=st.session_state.current_idempotency_key,
+                                scenario=dry_run_scenario
                             )
+                            
                         if final_res.get("status") == "failed":
-                            st.error("🚨 Call did not complete successfully.")
+                            status.update(label="Escalation result retrieval failed.", state="error")
+                            msg = final_res.get("message", "Call did not complete successfully.")
+                            st.error(f"🚨 {msg}")
                             with st.expander("CALL-E diagnostic details"):
                                 st.warning("No additional call will be attempted automatically.")
                                 st.json(final_res)
                         else:
-                            st.success("Escalation Complete")
+                            status.update(label="Escalation result received.", state="complete")
+                            final_status = final_res.get("final_status")
+                            
                             if not live_mode:
-                                st.info("### Dry-run fixture result — no real phone call was placed.")
-                            st.json(final_res)
+                                st.markdown("### Dry-run Human Approval Branch")
+                                st.info("This is a simulated CALL-E result. No phone call was placed. The dry run proves how GridGuard handles each human-in-the-loop outcome before any real escalation.")
+                                
+                                st.info("Rule: escalation requires authorization, evidence review, and explicit approval. Review alone does not authorize escalation.")
+                                
+                                from backend.call_e_integration import dispatch_escalation, DRY_RUN_BRANCHES
+                                import pandas as pd
+                                mapping_data = []
+                                for b in DRY_RUN_BRANCHES:
+                                    res = dispatch_escalation(advisory, dry_run=True, scenario=b)
+                                    mapping_data.append({
+                                        "Dry-run selection": b,
+                                        "Final status": res.get("final_status", "UNKNOWN"),
+                                        "Workflow result": res.get("workflow_result_text", "Unknown")
+                                    })
+                                df_mapping = pd.DataFrame(mapping_data)
+                                
+                                executed_scenario = final_res.get("dry_run_scenario", dry_run_scenario)
+                                current_row = df_mapping[df_mapping["Dry-run selection"] == executed_scenario].iloc[0]
+                                st.info(
+                                    f"**Current Dry-run Selection**\n\n"
+                                    f"- **Selected dry-run branch:** {current_row['Dry-run selection']}\n"
+                                    f"- **Current expected status:** {current_row['Final status']}\n"
+                                    f"- **Workflow result:** {current_row['Workflow result']}"
+                                )
+                                
+                                with st.container(border=True):
+                                    st.markdown("**Reference: All Dry-run Outcome Branches**")
+                                    st.caption("Reference only: this table shows every possible dry-run branch. The highlighted row matches the current selected branch.")
+                                    
+                                    def highlight_selected_row(row):
+                                        if row["Dry-run selection"] == executed_scenario:
+                                            return ['background-color: #166534; color: #ffffff; font-weight: 600'] * len(row)
+                                        return ['background-color: #1e293b; color: #e2e8f0'] * len(row)
+                                    
+                                    styled_df = df_mapping.style.apply(highlight_selected_row, axis=1)
+                                    st.table(styled_df)
+                            
+                            st.markdown("### Human-in-the-loop Status Panel")
+                            
+                            # Safely infer mode if not explicitly passed in final_res
+                            inferred_mode = "Unknown"
+                            if live_mode:
+                                inferred_mode = "Live CALL-E result"
+                            else:
+                                inferred_mode = "Dry-run fixture"
+                                
+                            st.write(f"- Mode: **{inferred_mode}**")
+                            st.write(f"- Current Status: **{final_status}**")
+                            auth_val = final_res.get('auth_confirmed')
+                            if auth_val is True: auth_display = "Confirmed"
+                            elif auth_val is False: auth_display = "False"
+                            else: auth_display = "Unknown"
+                            
+                            rev_val = final_res.get('review_confirmed')
+                            if rev_val is True: review_display = "Yes"
+                            elif rev_val is False: review_display = "No"
+                            else: review_display = "Unknown"
+                            
+                            decision_val = str(final_res.get('approval_decision')).lower() if final_res.get('approval_decision') else "none"
+                            if decision_val == "approve":
+                                decision_display = "Approved"
+                            elif decision_val == "reject":
+                                decision_display = "Rejected"
+                            elif decision_val == "hold":
+                                decision_display = "Hold"
+                            elif decision_val == "none":
+                                decision_display = "None"
+                            else:
+                                decision_display = decision_val.capitalize()
+                            st.write(f"- Authorized Approver: **{auth_display}**")
+                            st.write(f"- Review Confirmed: **{review_display}**")
+                            st.write(f"- Escalation Decision: **{decision_display}**")
+                            response_understood = final_res.get("response_understood", "Unknown")
+                            st.write(f"- Response Understood: **{response_understood}**")
+                            
+                            if final_status == "WRONG_RECIPIENT":
+                                st.error("Call ended. Recipient was not authorized. Escalation blocked.")
+                            elif final_status == "PENDING_REVIEW":
+                                st.warning("Escalation blocked. Advisory remains pending review.")
+                            elif final_status == "REVIEWED_NOT_APPROVED":
+                                st.warning("Human reviewed advisory but did not approve escalation.")
+                            elif final_status == "REVIEWED_HOLD":
+                                st.info("Escalation placed on hold by reviewer.")
+                            elif final_status == "ESCALATION_APPROVED":
+                                st.success("Human approval confirmed. Escalation workflow activated.")
+                                st.markdown("#### 📦 Escalation Package")
+                                st.json({
+                                    "advisory_id": advisory["advisory_id"],
+                                    "incident_priority": advisory["severity"],
+                                    "recommended_response_team": "Grid Operations Shift Team",
+                                    "action_summary": advisory["recommended_action"],
+                                    "customer_impact_risk": "Moderate",
+                                    "next_steps": "Deploy rapid response unit to asset.",
+                                    "audit_reference": final_res.get("call_id") or "simulated_call_id"
+                                })
+                            else:
+                                st.warning("Response unclear. Manual follow-up needed.")
+                                
+                            if not final_res.get("create_escalation_package", final_status == "ESCALATION_APPROVED"):
+                                st.info("No escalation package created because human approval was not completed.")
+                            
+                            from backend.persistence import get_decision_store
+                            store = get_decision_store()
+                            audit_packet = {
+                                "timestamp": final_res.get("timestamp"),
+                                "advisory_id": advisory["advisory_id"],
+                                "mode": "Live CALL-E result" if live_mode else "Dry-run fixture",
+                                "called_number": masked_number if live_mode else "Simulated",
+                                "expected_approver_role": "Grid Operations Shift Supervisor",
+                                "auth_confirmed": final_res.get("auth_confirmed"),
+                                "review_confirmed": final_res.get("review_confirmed"),
+                                "approval_decision": final_res.get("approval_decision"),
+                                "final_status": final_status,
+                                "response_understood": final_res.get("response_understood", "Unknown"),
+                                "recipient_response": final_res.get("recipient_response", "None"),
+                                "create_escalation_package": final_res.get("create_escalation_package", final_status == "ESCALATION_APPROVED"),
+                                "transcript_summary": final_res.get("transcript_summary")
+                            }
+                            if not live_mode and "dry_run_scenario" in final_res:
+                                audit_packet["dry_run_scenario"] = final_res["dry_run_scenario"]
+                                
+                            store.append({"type": "voice_escalation", "packet": audit_packet})
+                            
+                            with st.container(border=True):
+                                st.markdown("### Escalation Result Packet")
+                                st.markdown(f"**Mode:** {'Live CALL-E result' if live_mode else 'Dry-run fixture'}")
+                                st.markdown(f"**Recipient:** `{masked_number if live_mode else 'Not applicable'}`")
+                                st.markdown(f"**Call ID:** `{final_res.get('call_id') if live_mode else 'Not applicable'}`")
+                                st.markdown(f"**Terminal Status:** `{final_status}`")
+                                st.markdown(f"**Audit Packet:** `Saved`")
+                                st.write(f"- Recipient Response: {final_res.get('recipient_response', 'None')}")
+                                st.markdown("#### Compact Transcript")
+                                
+                                import json, ast, re
+                                import pandas as pd
+                                
+                                turns = final_res.get("transcript_turns", [])
+                                raw_transcript = final_res.get("transcript_summary", "")
+                                
+                                if not turns and raw_transcript:
+                                    if isinstance(raw_transcript, list):
+                                        turns = raw_transcript
+                                    elif isinstance(raw_transcript, str):
+                                        try:
+                                            turns = json.loads(raw_transcript)
+                                        except:
+                                            try:
+                                                turns = ast.literal_eval(raw_transcript)
+                                            except:
+                                                pass
+                                        
+                                        if not isinstance(turns, list):
+                                            turns = []
+                                            text_turns = re.split(r'(Bot:|User:|Agent:|Operator:|Recipient:)', raw_transcript, flags=re.IGNORECASE)
+                                            if len(text_turns) > 1:
+                                                current_speaker = "bot"
+                                                for part in text_turns:
+                                                    if not part.strip(): continue
+                                                    lower_part = part.strip().lower()
+                                                    if lower_part in ["bot:", "agent:"]:
+                                                        current_speaker = "bot"
+                                                    elif lower_part in ["user:", "operator:", "recipient:"]:
+                                                        current_speaker = "user"
+                                                    else:
+                                                        turns.append({"speaker": current_speaker, "text": part.strip()})
+                                
+                                if turns and isinstance(turns, list) and len(turns) > 0:
+                                    table_data = []
+                                    for t in turns:
+                                        if not isinstance(t, dict): continue
+                                        
+                                        speaker_raw = str(t.get("speaker", t.get("role", ""))).lower()
+                                        msg = t.get("text", t.get("message", t.get("content", "")))
+                                        time_val = t.get("time", t.get("offset", ""))
+                                        
+                                        if speaker_raw in ["bot", "assistant", "agent"]:
+                                            speaker_label = "GridGuard Agent"
+                                        elif speaker_raw in ["user", "human", "recipient", "operator"]:
+                                            speaker_label = "Human Recipient"
+                                        else:
+                                            speaker_label = "GridGuard Agent"
+                                            
+                                        row = {"Speaker": speaker_label, "Message": msg}
+                                        if time_val:
+                                            row["Time/Offset"] = time_val
+                                        table_data.append(row)
+                                        
+                                    st.table(pd.DataFrame(table_data))
+                                    
+                                    with st.expander("Raw transcript data"):
+                                        st.write(raw_transcript)
+                                else:
+                                    st.info(raw_transcript if raw_transcript else "Mock fixture")
+                                    
+                                st.markdown("##### Interpretation Summary")
+                                auth_display = "Confirmed" if final_res.get('auth_confirmed') else ("Not confirmed" if final_res.get('auth_confirmed') is False else "Unknown")
+                                review_display = "Yes" if final_res.get('review_confirmed') else ("No" if final_res.get('review_confirmed') is False else "Unknown")
+                                decision_display = str(final_res.get('approval_decision')).capitalize() if final_res.get('approval_decision') else "Unknown"
+                                
+                                st.write(f"- Authorized approver: {auth_display}")
+                                st.write(f"- Review confirmed: {review_display}")
+                                st.write(f"- Escalation decision: {decision_display}")
+                                st.write(f"- Final status: {final_status}")
+                            
+                            if live_mode and "field_inspection" in final_res:
+                                with st.expander("CALL-E response field inspection"):
+                                    for k, v in final_res["field_inspection"].items():
+                                        st.write(f"- `{k}`: **{v}**")
                     except Exception as e:
                         st.error(f"Failed to execute call: {str(e)}")
                     finally:
@@ -962,6 +1207,12 @@ with tab_escalation:
                             del st.session_state.current_idempotency_key
             else:
                 st.warning("Please check the consent box to proceed with drafting the call.")
+                
+        st.markdown("---")
+
+        st.markdown("---")
+        st.markdown("### Live CALL-E result retrieval")
+        st.info("GridGuard retrieves results only for calls created by this application, using the provider API call ID returned at creation time. Dashboard call-record IDs are not accepted here.")
             
     else:
         st.success(f"Current grid risk is {risk['level']}. No automated escalation is required at this time.")
