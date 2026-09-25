@@ -5,3 +5,4 @@ __pycache__/
 .env
 .pytest_cache/
 data/runtime/*.json
+data/runtime/assembly_voice_audits/

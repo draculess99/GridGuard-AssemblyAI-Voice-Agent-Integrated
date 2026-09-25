@@ -1,0 +1,5 @@
+This is a synthetic training incident. Substation Alpha is experiencing a critical thermal overload. 
+The operator requests emergency crew standby and a controlled inspection. No automatic dispatch, isolation, or 
+grid control is authorized. 
+An authorized human reviewer must review the transcript and decide whether to approve, hold, reject, or escalate the 
+proposed action.

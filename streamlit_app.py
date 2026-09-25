@@ -28,6 +28,7 @@ from backend.rag import LocalRagIndex
 from backend.service import build_forecast_package
 from backend.token_meter import TokenMeter
 from backend.call_e_integration import dispatch_escalation
+from assembly_voice_tab import render_assembly_voice_tab
 
 load_dotenv(override=True)
 
@@ -363,9 +364,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_escalation, tab_control, tab_intelligence, tab_scenario, tab_model, tab_audit, tab_committee, tab_data = st.tabs(
-    ["Voice Escalation", "Forecast Evidence", "X-Decision & RAG", "Scenario Lab", "Model Quality", "Audit & Operations", "Committee Transcript", "Data Sources"]
+tab_escalation, tab_assembly, tab_control, tab_intelligence, tab_scenario, tab_model, tab_audit, tab_committee, tab_data = st.tabs(
+    ["Voice Escalation", "Assembly Voice", "Forecast Evidence", "X-Decision & RAG", "Scenario Lab", "Model Quality", "Audit & Operations", "Committee Transcript", "Data Sources"]
 )
+
+with tab_assembly:
+    render_assembly_voice_tab()
 
 with tab_control:
     st.caption(
